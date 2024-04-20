@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -39,7 +40,7 @@ const detailBoxSelector = `#container > div.box.startup-db-view`
 var limit = &colly.LimitRule{
 	DomainGlob:  "*",
 	Parallelism: 1,
-	Delay:       time.Second,
+	Delay:       time.Millisecond * 10,
 }
 
 func retry(resp *colly.Response, err error) {
@@ -48,7 +49,31 @@ func retry(resp *colly.Response, err error) {
 	resp.Request.Retry()
 }
 
+const baseUrl = "https://www.hankyung.com"
+
+const entryPoint = baseUrl + "/geeks/startupdb"
+
 func main() {
+	filename := flag.Arg(0)
+	if filename == "" {
+		filename = "companies.ndjson"
+	}
+
+	f, err := os.OpenFile(
+		filename,
+		os.O_APPEND|
+			os.O_WRONLY|
+			os.O_CREATE,
+		0600,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	// enc.SetIndent("", "\t")
+
 	paginationCollector := colly.NewCollector(
 		colly.Async(),
 	)
@@ -62,11 +87,8 @@ func main() {
 	})
 
 	paginationCollector.OnHTML(detailSelector, func(e *colly.HTMLElement) {
-		companyDetailCollector.Visit("https://www.hankyung.com" + e.Attr("href"))
+		companyDetailCollector.Visit(baseUrl + e.Attr("href"))
 	})
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "\t")
 
 	companyDetailCollector.OnHTML(detailBoxSelector, func(e *colly.HTMLElement) {
 		var company Company
@@ -88,7 +110,7 @@ func main() {
 	paginationCollector.OnError(retry)
 	companyDetailCollector.OnError(retry)
 
-	paginationCollector.Visit("https://www.hankyung.com/geeks/startupdb")
+	paginationCollector.Visit(entryPoint)
 
 	paginationCollector.Wait()
 }
