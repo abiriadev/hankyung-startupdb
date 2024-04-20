@@ -7,28 +7,49 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
-const next = `#container > div > div.db-search-result > div.db-search-list > div > a.btn-page-next`
+const nextSelector = `#container > div > div.db-search-result > div.db-search-list > div > a.btn-page-next`
+
+const detailSelector = `#container > div > div.db-search-result > div.db-search-list > ul > li > div.txt-cont > div.startup-name > a`
+
+var limit = &colly.LimitRule{
+	DomainGlob:  "*",
+	Parallelism: 1,
+	Delay:       time.Second,
+}
+
+func retry(resp *colly.Response, err error) {
+	resp.Request.Retry()
+}
 
 func main() {
-	c := colly.NewCollector()
+	paginationCollector := colly.NewCollector(
+		colly.Async(),
+	)
+	companyDetailCollector := colly.NewCollector()
 
-	c.Limit(&colly.LimitRule{
-		DomainGlob:  "*",
-		Parallelism: 1,
-		Delay:       time.Second,
-	})
+	paginationCollector.Limit(limit)
+	companyDetailCollector.Limit(limit)
 
-	c.OnHTML(next, func(e *colly.HTMLElement) {
+	paginationCollector.OnHTML(nextSelector, func(e *colly.HTMLElement) {
 		e.Request.Visit(e.Attr("href"))
 	})
 
-	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL)
+	paginationCollector.OnHTML(detailSelector, func(e *colly.HTMLElement) {
+		companyDetailCollector.Visit(e.Attr("href"))
 	})
 
-	c.OnError(func(resp *colly.Response, err error) {
-		resp.Request.Retry()
+	paginationCollector.OnRequest(func(r *colly.Request) {
+		fmt.Println("Page", r.URL)
 	})
 
-	c.Visit("https://www.hankyung.com/geeks/startupdb")
+	companyDetailCollector.OnRequest(func(r *colly.Request) {
+		fmt.Println("Company", r.URL)
+	})
+
+	paginationCollector.OnError(retry)
+	companyDetailCollector.OnError(retry)
+
+	paginationCollector.Visit("https://www.hankyung.com/geeks/startupdb")
+
+	paginationCollector.Wait()
 }
