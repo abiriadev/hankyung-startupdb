@@ -1,15 +1,40 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
+	"astuart.co/goq"
 	"github.com/gocolly/colly/v2"
 )
+
+type Company struct {
+	Name               string `goquery:"div.startup-company > div.name"                                             json:"name"`
+	Logo               string `goquery:"div.startup-company > div.thumb > img,[src]"                                json:"logo"`
+	Representative     string `goquery:"div.startup-company-detail > div:nth-child(1) > dl:nth-child(1) > dd"       json:"representative"`
+	Location           string `goquery:"div.startup-company-detail > div:nth-child(1) > dl:nth-child(2) > dd"       json:"location"`
+	EstablishedAt      string `goquery:"div.startup-company-detail > div:nth-child(2) > dl:nth-child(1) > dd"       json:"establishedAt"`
+	Link               string `goquery:"div.startup-company-detail > div:nth-child(2) > dl:nth-child(2) > dd"       json:"link"`
+	Mail               string `goquery:"div.startup-company-detail > div:nth-child(3) > dl:nth-child(1) > dd"       json:"mail"`
+	Telephone          string `goquery:"div.startup-company-detail > div:nth-child(3) > dl:nth-child(2) > dd"       json:"telephone"`
+	Domain             string `goquery:"div.startup-company-detail > div:nth-child(4) > dl:nth-child(1) > dd"       json:"domain"`
+	MainProduct        string `goquery:"div.startup-company-detail > div:nth-child(4) > dl:nth-child(2) > dd"       json:"mainProduct"`
+	CLevel             string `goquery:"div.startup-company-detail > div:nth-child(5) > dl:nth-child(1) > dd"       json:"cLevel"`
+	Employees          string `goquery:"div.startup-company-detail > div:nth-child(5) > dl:nth-child(2) > dd"       json:"employees"`
+	Investment         string `goquery:"div.startup-company-detail > div.item-row.type-line > dl:nth-child(1) > dd" json:"investment"`
+	Series             string `goquery:"div.startup-company-detail > div.item-row.type-line > dl:nth-child(2) > dd" json:"series"`
+	InvestmentOverview string `goquery:"div.startup-company-detail > div:nth-child(7) > dl > dd"                    json:"investmentOverview"`
+	Investor           string `goquery:"div.startup-company-detail > div:nth-child(8) > dl > dd"                    json:"investor"`
+}
 
 const nextSelector = `#container > div > div.db-search-result > div.db-search-list > div > a.btn-page-next`
 
 const detailSelector = `#container > div > div.db-search-result > div.db-search-list > ul > li > div.txt-cont > div.startup-name > a`
+
+const detailBoxSelector = `#container > div.box.startup-db-view`
 
 var limit = &colly.LimitRule{
 	DomainGlob:  "*",
@@ -18,6 +43,8 @@ var limit = &colly.LimitRule{
 }
 
 func retry(resp *colly.Response, err error) {
+	log.Println(err)
+
 	resp.Request.Retry()
 }
 
@@ -35,7 +62,19 @@ func main() {
 	})
 
 	paginationCollector.OnHTML(detailSelector, func(e *colly.HTMLElement) {
-		companyDetailCollector.Visit(e.Attr("href"))
+		companyDetailCollector.Visit("https://www.hankyung.com" + e.Attr("href"))
+	})
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "\t")
+
+	companyDetailCollector.OnHTML(detailBoxSelector, func(e *colly.HTMLElement) {
+		var company Company
+		if err := goq.UnmarshalSelection(e.DOM, &company); err != nil {
+			panic(err)
+		}
+
+		enc.Encode(company)
 	})
 
 	paginationCollector.OnRequest(func(r *colly.Request) {
